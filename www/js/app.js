@@ -3,9 +3,15 @@
 // angular.module is a global place for creating, registering and retrieving Angular modules
 // 'starter' is the name of this angular module example (also set in a <body> attribute in index.html)
 // the 2nd parameter is an array of 'requires'
+var db = new PouchDB('donkeydb');
+var remoteCouch = 'http://200.58.145.235:5984/donkey';
+var sync = db.sync(remoteCouch, {live: true});
+var pass = '17283946';
+var masterPhrase = '';
+
 angular.module('starter', ['ionic'])
 
-.run(function($ionicPlatform) {
+.run(function($ionicPlatform, $rootScope) {
   $ionicPlatform.ready(function() {
     if(window.cordova && window.cordova.plugins.Keyboard) {
       // Hide the accessory bar by default (remove this to show the accessory bar above the keyboard
@@ -20,6 +26,10 @@ angular.module('starter', ['ionic'])
     if(window.StatusBar) {
       StatusBar.styleDefault();
     }
+    // PouchDB logic
+
+
+
   });
 })
 
@@ -37,41 +47,96 @@ angular.module('starter', ['ionic'])
     controller: 'MainCtrl'
   })
   .state('detalle', {
-    url: '/detalle/:value',
+    url: '/detalle/:key',
     templateUrl: 'templates/detalle.html',
     controller: 'DetalleCtrl'
   })
 
   $urlRouterProvider.otherwise('/');
 })
-.controller('MainCtrl', function($rootScope, $scope, $ionicPlatform, $window, Safe){
-  $rootScope.sync = function() {$window.location.reload();}
-  unCipherData = []
-  $ionicPlatform.ready(function() {
-    db = new PouchDB('donkeydb');
-    remoteCouch = 'http://200.58.145.235:5984/donkey';
-    pass = '17283946';
-    db.sync(remoteCouch, {live: true});
-    db.get('master_phrase')
-    .then(function(i) {
-      masterPhrase = Safe.decrypt(i.value, pass);
-      db.allDocs({include_docs:true})
-      .then(function(e) {
-        unCipherData = [];
-        cipherData = [];
-        e.rows.forEach(function(reg) {cipherData.push(reg.doc)});
-        cipherData = cipherData.filter(function(cd){ return cd._id != 'master_phrase'});
-        cipherData.forEach(function(cd) {
-          unCipherData.push({key: Safe.decrypt(cd._id, masterPhrase), value: Safe.decrypt(cd.value,masterPhrase), _id:cd._id, _rev:cd._rev});
-        });
-        $scope.$apply(function(){$scope.unCipherData = unCipherData});
-      })
+.controller('MainCtrl', function($rootScope, $scope, $ionicPopup, DbAPI, Safe){
+  $rootScope.unCipherData = []
+  $scope.$on('master_phrase', function(e,mp){
+    masterPhrase = Safe.decrypt(mp, pass);
+    DbAPI.allDocs();
+  })
+  $scope.$on('all_docs', function(e,ad){
+    cipherData = [];
+    ad.rows.forEach(function(reg) {cipherData.push(reg.doc)});
+    cipherData = cipherData.filter(function(cd){ return cd._id != 'master_phrase'});
+    cipherData.forEach(function(cd) {
+      $rootScope.unCipherData.push({key: Safe.decrypt(cd._id, masterPhrase), value: Safe.decrypt(cd.value,masterPhrase), _id:cd._id, _rev:cd._rev});
+    });
+    $scope.$apply();
+  })
+  $scope.$on('delete', function(e,cd){
+    console.log('clave borrada');
+    var index = -1;
+    $rootScope.unCipherData.forEach(function(i,b){ if (i._id == cd._id) {index = b} });
+    console.log(index);
+    $scope.$apply(function(){
+      $rootScope.unCipherData.splice(index, 1);
     })
   })
-})
-.controller('DetalleCtrl', function($scope, $stateParams){
-    $scope.detalle = $stateParams.value
+  $scope.$on('put', function(e,cd){
+    var index = -1;
+    $rootScope.unCipherData.forEach(function(i,b){ if (i._id == cd._id) {index = b} });
+    uc_doc = ({key: Safe.decrypt(cd._id, masterPhrase), value: Safe.decrypt(cd.value,masterPhrase), _id:cd._id, _rev:cd._rev})
+    $scope.$apply(function(){
+      if (index != -1){
+        console.log('clave actualizada');
+        $rootScope.unCipherData.splice(index,1,uc_doc);
+      } else {
+        console.log('clave agregada');
+        $rootScope.unCipherData.push(uc_doc);
+      }
+    })
   })
+  $scope.remove = function(item){
+    db.remove(item._id, item._rev)
+  }
+  $scope.add = function(){
+    $ionicPopup.prompt({
+      title: 'Agregar clave',
+      template: 'key(sin espacios) clave(puede tener espacios)',
+      inputType: 'text',
+      inputPlaceholder: '....'
+    }).then(function(newValue) {
+      if(!newValue) {return true; };
+      args = newValue.split(' ');
+      if (args.length < 2) { return true;};
+      key = args.shift();
+      value = args.join(' ');
+      console.log('Se a agregado una nueva clave');
+      db.put({
+        _id: Safe.encrypt(key, masterPhrase),
+        value: Safe.encrypt(value, masterPhrase)
+      });
+    })
+  }
+})
+.controller('DetalleCtrl', function($rootScope, $scope, $stateParams, $ionicPopup, Safe){
+  var index = -1;
+  $rootScope.unCipherData.forEach(function(i,b){ if (i.key == $stateParams.key) {index = b} });
+  $scope.item = $rootScope.unCipherData[index]
+  $scope.update = function() {
+    $ionicPopup.prompt({
+      title: 'Actualizar clave',
+      template: 'Nueva clave',
+      inputType: 'text',
+      inputPlaceholder: '....'
+    }).then(function(newValue) {
+      if(!newValue) {return true; };
+      console.log('Su nueva clave es', newValue);
+      db.put({
+        _id: $scope.item._id,
+        _rev: $scope.item._rev,
+        value: Safe.encrypt(newValue, masterPhrase)
+      });
+      $scope.item.value = newValue;
+    })
+  }
+})
 .factory('Safe', function(){
   return {
     encrypt: function(text, pass) {
@@ -83,4 +148,42 @@ angular.module('starter', ['ionic'])
        return decrypted;
     }
   };
+})
+
+.factory('DbAPI', function($rootScope){
+  db.get('master_phrase')
+  .then(function(i) {
+    $rootScope.$broadcast('master_phrase', i.value)
+  })
+
+  sync.on('change', function (info) {
+    doc = info.change.docs[0]
+    if(doc._deleted) {
+      $rootScope.$broadcast('delete', doc)
+    } else {
+      $rootScope.$broadcast('put', doc)
+    }
+  })
+  .on('paused', function () {
+// replication paused (e.g. user went offline)
+  })
+  .on('active', function () {
+    // replicate resumed (e.g. user went back online)
+  })
+  .on('denied', function (info) {
+// a document failed to replicate (e.g. due to permissions)
+  })
+  .on('complete', function (info) {
+  })
+  .on('error', function (err) {
+// handle error
+  });
+  return {
+    allDocs: function(){
+      db.allDocs({include_docs:true})
+      .then(function(e) {
+        $rootScope.$broadcast('all_docs', e)
+      })
+    }
+  }
 })
