@@ -5,7 +5,8 @@
 // the 2nd parameter is an array of 'requires'
 var db = new PouchDB('donkeydb');
 var remoteCouch = 'http://200.58.145.235:5984/donkey';
-var sync = db.sync(remoteCouch, {live: true});
+var pull = PouchDB.replicate(remoteCouch, db, {live: true, retry: true});
+var push = PouchDB.replicate(db, remoteCouch, {live: true, retry: true});
 var pass = '17283946';
 var masterPhrase = '';
 
@@ -155,29 +156,29 @@ angular.module('starter', ['ionic'])
   .then(function(i) {
     $rootScope.$broadcast('master_phrase', i.value)
   })
+  db.changes({
+    since:'now',
+    live: true,
+    include_docs: true
+  }).on('change', function (info) {
+    console.log(info);
+    doc = info.doc
+    if(doc._deleted) {
+      $rootScope.$broadcast('delete', doc)
+    } else {
+      $rootScope.$broadcast('put', doc)
+    }
+  });
 
-  sync.on('change', function (info) {
+  pull.on('change', function (info) {
     doc = info.change.docs[0]
     if(doc._deleted) {
       $rootScope.$broadcast('delete', doc)
     } else {
       $rootScope.$broadcast('put', doc)
     }
-  })
-  .on('paused', function () {
-// replication paused (e.g. user went offline)
-  })
-  .on('active', function () {
-    // replicate resumed (e.g. user went back online)
-  })
-  .on('denied', function (info) {
-// a document failed to replicate (e.g. due to permissions)
-  })
-  .on('complete', function (info) {
-  })
-  .on('error', function (err) {
-// handle error
   });
+
   return {
     allDocs: function(){
       db.allDocs({include_docs:true})
