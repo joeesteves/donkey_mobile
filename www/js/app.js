@@ -7,7 +7,6 @@ var db = new PouchDB('donkeydb');
 var remoteCouch = 'http://200.58.145.235:5984/donkey';
 var pull = PouchDB.replicate(remoteCouch, db, {live: true, retry: true});
 var push = PouchDB.replicate(db, remoteCouch, {live: true, retry: true});
-var pass = '17283946';
 var masterPhrase = '';
 
 angular.module('starter', ['ionic'])
@@ -63,7 +62,6 @@ angular.module('starter', ['ionic'])
 .controller('LoginCtrl', function($scope, $timeout, $state, Safe){
   $scope._showLockScreen   = true;
   $scope.ACDelbuttons      = true;
-  // $scope.passcode          = data.passcode;
   $scope.onCorrect         = null;
   $scope.onWrong           = null;
   $scope.passcodeLabel     = "Release the DonKey";
