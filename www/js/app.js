@@ -42,8 +42,13 @@ angular.module('starter', ['ionic'])
   // Each state's controller can be found in controllers.js
   $stateProvider
 
-  .state('main', {
+  .state('login', {
     url: '/',
+    templateUrl: 'templates/login.html',
+    controller: 'LoginCtrl'
+  })
+  .state('main', {
+    url: '/main',
     templateUrl: 'templates/main.html',
     controller: 'MainCtrl'
   })
@@ -55,12 +60,66 @@ angular.module('starter', ['ionic'])
 
   $urlRouterProvider.otherwise('/');
 })
+.controller('LoginCtrl', function($scope, $timeout, $state, Safe){
+  $scope._showLockScreen   = true;
+  $scope.ACDelbuttons      = true;
+  // $scope.passcode          = data.passcode;
+  $scope.onCorrect         = null;
+  $scope.onWrong           = null;
+  $scope.passcodeLabel     = "Release the DonKey";
+  $scope.backgroundColor   = "#F1F1F1";
+  $scope.textColor         = "#464646";
+  $scope.buttonColor       = "#F8F8F8";
+  $scope.buttonTextColor   = "#464646";
+  $scope.buttonPressed     = "#E0E0E0";
+  $scope.buttonACColor     = "#F8F8F8";
+  $scope.buttonACTextColor = "#464646";
+  $scope.buttonDelColor    = "#F8F8F8";
+  $scope.buttonDelTextColor= "#464646";
+
+  $scope.all_clear = function() {
+    $scope.enteredPasscode = "";
+  };
+  $scope.delete = function() {
+    $scope.enteredPasscode = $scope.enteredPasscode.slice(0,-1);
+  };
+  db.get('master_phrase')
+  .then(function(i) {
+    cpMasterPhrase = i.value;
+    $scope.enteredPasscode = '';
+    $scope.digit = function(digit) {
+      $scope.selected = +digit;
+      $scope.enteredPasscode += '' + digit;
+      if ($scope.enteredPasscode.length >= 8) {
+        try {
+          masterPhrase = Safe.decrypt(cpMasterPhrase,$scope.enteredPasscode)
+          if (masterPhrase == '') {
+            $scope.passcodeWrong = true;
+            $timeout(function(){
+              $scope.passcodeWrong = false;
+              $scope.enteredPasscode = '';
+            }, 800);
+          } else {
+            $timeout(function(){
+              $state.go('main')
+            }, 800);
+          }
+        } catch (e) {
+          $scope.passcodeWrong = true;
+          $timeout(function(){
+            $scope.passcodeWrong = false;
+            $scope.enteredPasscode = '';
+          }, 800);
+
+        }
+      }
+    }
+  })
+})
+
 .controller('MainCtrl', function($rootScope, $scope, $ionicPopup, DbAPI, Safe){
   $rootScope.unCipherData = []
-  $scope.$on('master_phrase', function(e,mp){
-    masterPhrase = Safe.decrypt(mp, pass);
-    DbAPI.allDocs();
-  })
+  DbAPI.allDocs();
   $scope.$on('all_docs', function(e,ad){
     cipherData = [];
     ad.rows.forEach(function(reg) {cipherData.push(reg.doc)});
@@ -152,10 +211,6 @@ angular.module('starter', ['ionic'])
 })
 
 .factory('DbAPI', function($rootScope){
-  db.get('master_phrase')
-  .then(function(i) {
-    $rootScope.$broadcast('master_phrase', i.value)
-  })
   db.changes({
     since:'now',
     live: true,

@@ -1,3 +1,6 @@
+<ion-header-bar class="bar-stable">
+  <h1 class="title">The Donkey Guard</h1>
+</ion-header-bar>
 <ion-view>
   <ion-content>
     <label class="item item-input">
@@ -9,7 +12,7 @@
     </button>
 
     <ion-list>
-      <ion-item class="item-remove-animate item-avatar item-icon-right" ng-repeat="item in unCipherData | orderBy: 'key' | filter:search | limitTo:10" type="item-text-wrap" href="#/detalle/{{item.key}}">
+      <ion-item class="item-remove-animate item-avatar item-icon-right" ng-repeat="item in unCipherData | orderBy: 'key' | filter:search" type="item-text-wrap" href="#/detalle/{{item.key}}">
         <img ng-src="img/angry_dk.png">
         <h2>{{item.key}}</h2>
         <i class="icon ion-chevron-right icon-accessory"></i>
